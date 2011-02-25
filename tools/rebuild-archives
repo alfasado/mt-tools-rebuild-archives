@@ -1,0 +1,80 @@
+#!/usr/bin/perl -w
+package MT::Tool::RebuildArchives;
+use strict;
+
+use lib  qw( extlib lib );
+use base qw( MT::Tool );
+
+sub usage { '[--at <comma,separated,archive_types>] [--blog_id <comma,separated,blog_ids>]' }
+
+sub help {
+    return q {
+        Rebuild blog by archive types
+
+        --at <comma,separated,archive_types>
+                      Optional: Index,Monthly,Individual,Category...
+        --blog_id <comma,separated,blog_ids>
+                      Optional: 1,2,3...
+        --sleep <integer>
+                      Optional: default => 0
+
+    };
+}
+
+my ( $at, $blog_id, $sleep );
+
+sub options {
+    return (
+        'at=s'  => \$at,
+        'blog_id=s' => \$blog_id,
+        'sleep=s' => \$sleep,
+    );
+}
+
+sub main {
+    my $class = shift;
+    my ( $verbose ) = $class->SUPER::main( @_ );
+    my @ats;
+    my $terms;
+    if ( $at ) {
+        @ats = split( /,/, $at );
+        $terms->{ archive_type } = \@ats;
+    }
+    my @blog_ids;
+    if ( $blog_id ) {
+        @blog_ids = split( /,/, $blog_id );
+        $terms->{ blog_id } = \@blog_ids;
+    }
+    require MT::FileInfo;
+    require MT::TemplateMap;
+    require MT::Template;
+    require MT::WeblogPublisher;
+    my $pub = MT::WeblogPublisher->new;
+    my $iter = MT::FileInfo->load_iter( $terms );
+    while ( my $fi = $iter->() ) {
+        if (! $fi->virtual ) {
+            my $map_id = $fi->templatemap_id;
+            my $tmpl_id = $fi->template_id;
+            if ( $map_id ) {
+                my $map = MT::TemplateMap->load( $map_id );
+                if ( $map ) {
+                    next unless $map->build_type;
+                }
+            } elsif ( $tmpl_id ) {
+                my $tmpl = MT::Template->load( $tmpl_id );
+                if ( $tmpl ) {
+                    next unless $tmpl->build_type;
+                }
+            }
+            $pub->rebuild_from_fileinfo( $fi );
+            if ( $sleep ) {
+                sleep $sleep;
+            }
+        }
+    }
+    1;
+}
+
+__PACKAGE__->main() unless caller;
+
+1;
